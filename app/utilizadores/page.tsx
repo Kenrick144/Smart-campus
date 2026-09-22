@@ -153,37 +153,34 @@ const menuItems = [
 ];
 
 export default function Utilizadores() {
-  const [users, setUsers] = useState<User[]>(initialUsers);
-  const [storageReady, setStorageReady] = useState(false);
+  const [users, setUsers] = useState<User[]>(() => {
+    if (typeof window === "undefined") {
+      return initialUsers;
+    }
+
+    try {
+      const savedUsers = window.localStorage.getItem(USERS_STORAGE_KEY);
+      if (!savedUsers) {
+        return initialUsers;
+      }
+
+      const parsedUsers = JSON.parse(savedUsers);
+      return Array.isArray(parsedUsers) ? parsedUsers : initialUsers;
+    } catch {
+      return initialUsers;
+    }
+  });
   const [search, setSearch] = useState("");
   const [filterRole, setFilterRole] = useState<"Todos" | UserRole>("Todos");
 
-  // Recupera os utilizadores já criados. A página Professor usa esta mesma
-  // fonte para reconhecer automaticamente as contas cujo perfil é Professor.
   useEffect(() => {
-    try {
-      const savedUsers = window.localStorage.getItem(USERS_STORAGE_KEY);
-      if (savedUsers) {
-        const parsedUsers = JSON.parse(savedUsers);
-        if (Array.isArray(parsedUsers)) {
-          setUsers(parsedUsers);
-        }
-      }
-    } catch {
-      // Mantém os dados iniciais se o armazenamento estiver indisponível.
-    } finally {
-      setStorageReady(true);
-    }
-  }, []);
+    if (typeof window === "undefined") return;
 
-  // Guarda a lista depois de a leitura inicial terminar.
-  useEffect(() => {
-    if (!storageReady) return;
     window.localStorage.setItem(
       USERS_STORAGE_KEY,
       JSON.stringify(users)
     );
-  }, [users, storageReady]);
+  }, [users]);
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -225,7 +222,6 @@ export default function Utilizadores() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [permissions, setPermissions] = useState<string[]>([]);
 
   const employeeDepartments = [
     "Direção", "Administração", "Secretaria", "Recursos Humanos",
@@ -240,19 +236,6 @@ export default function Utilizadores() {
     "Técnico de Biblioteca", "Técnico de Manutenção", "Assistente Operacional", "Outro"
   ];
 
-  const permissionGroups: Record<string, string[]> = {
-    "Utilizadores": ["Ver utilizadores", "Criar aluno", "Criar professor", "Criar funcionário", "Editar utilizadores", "Desativar utilizadores", "Reativar utilizadores", "Redefinir palavra-passe"],
-    "Alunos": ["Ver alunos", "Criar aluno", "Editar aluno", "Desativar aluno", "Ver dados do encarregado de educação", "Alterar dados académicos", "Associar aluno a turma"],
-    "Professores": ["Ver professores", "Editar professor", "Desativar professor", "Associar professor a disciplina", "Associar professor a turma", "Definir professor coordenador de turma"],
-    "Disciplinas": ["Ver disciplinas", "Criar disciplina", "Editar disciplina", "Desativar disciplina", "Associar professor à disciplina", "Definir coordenador de departamento"],
-    "Turmas": ["Ver turmas", "Criar turma", "Editar turma", "Desativar turma", "Associar alunos", "Associar professores", "Associar disciplinas", "Definir professor coordenador"],
-    "Horários": ["Ver horários", "Criar horário", "Editar horário", "Remover horário", "Associar professor", "Associar disciplina", "Associar turma"],
-    "Ano letivo": ["Ver anos letivos", "Criar ano letivo", "Editar ano letivo", "Ativar/desativar ano letivo"],
-    "Relatórios": ["Ver relatórios", "Gerar relatórios", "Exportar relatórios"],
-    "Configurações": ["Ver configurações", "Alterar configurações gerais"],
-    "Segurança e administração": ["Ver registos de atividade", "Ver histórico de alterações", "Bloquear/desbloquear utilizadores"],
-  };
-
   function openForm() { setShowForm(true); }
   function closeForm() { setShowForm(false); }
 
@@ -265,18 +248,12 @@ export default function Utilizadores() {
     setGuardianNif(""); setGuardianDocumentType("Cartão de Cidadão"); setGuardianDocumentNumber("");
     setGuardianAddress(""); setGuardianAlternativePhone("");
     setDepartment(""); setEmployeePosition(""); setHiringDate(""); setContractType(""); setProfessionalStatus("Ativo");
-    setUsername(""); setPassword(""); setConfirmPassword(""); setPermissions([]);
+    setUsername(""); setPassword(""); setConfirmPassword("");
   }
 
   function generateNumber(prefix: string, existing: User[], field: keyof User) {
     const nums = existing.map(u => Number(String(u[field] ?? "").replace(/\D/g, ""))).filter(n => Number.isFinite(n) && n > 0);
     return `${prefix}${String(nums.length ? Math.max(...nums) + 1 : 1).padStart(4, "0")}`;
-  }
-
-  function togglePermission(permission: string) {
-    setPermissions(current => current.includes(permission)
-      ? current.filter(item => item !== permission)
-      : [...current, permission]);
   }
 
   function addUser(event: FormEvent<HTMLFormElement>) {
