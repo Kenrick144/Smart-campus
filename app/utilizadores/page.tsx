@@ -183,6 +183,7 @@ export default function Utilizadores() {
   }, [users]);
 
   const [showForm, setShowForm] = useState(false);
+  const [editingUserEmail, setEditingUserEmail] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<UserRole>("Aluno");
@@ -237,6 +238,51 @@ export default function Utilizadores() {
   ];
 
   function openForm() { setShowForm(true); }
+  function editUser(user: User) {
+    setEditingUserEmail(user.email);
+
+    setName(user.name);
+    setEmail(user.email);
+    setRole(user.role);
+    setStatus(user.status);
+
+    setBirthDate(user.birthDate ?? "");
+    setPhone(user.phone ?? "");
+    setNif(user.nif ?? "");
+    setDocumentType(user.documentType ?? "Cartão de Cidadão");
+    setDocumentNumber(user.documentNumber ?? "");
+    setNiss(user.niss ?? "");
+    setHealthNumber(user.healthNumber ?? "");
+    setAddress(user.address ?? "");
+
+    setSchoolYear(user.schoolYear ?? "");
+    setStudentNumber(user.studentNumber ?? "");
+    setCourse(user.course ?? "");
+    setClassName(user.className ?? "");
+    setEnrollmentDate(user.enrollmentDate ?? "");
+
+    setGuardianName(user.guardianName ?? "");
+    setGuardianRelationship(user.guardianRelationship ?? "");
+    setGuardianPhone(user.guardianPhone ?? "");
+    setGuardianEmail(user.guardianEmail ?? "");
+    setGuardianNif(user.guardianNif ?? "");
+    setGuardianDocumentType(user.guardianDocumentType ?? "Cartão de Cidadão");
+    setGuardianDocumentNumber(user.guardianDocumentNumber ?? "");
+    setGuardianAddress(user.guardianAddress ?? "");
+    setGuardianAlternativePhone(user.guardianAlternativePhone ?? "");
+
+    setDepartment(user.department ?? "");
+    setEmployeePosition(user.employeePosition ?? "");
+    setHiringDate(user.hiringDate ?? "");
+    setContractType(user.contractType ?? "");
+    setProfessionalStatus(user.professionalStatus ?? "Ativo");
+
+    setUsername(user.username ?? "");
+    setPassword(user.password ?? "");
+    setConfirmPassword(user.password ?? "");
+
+    setShowForm(true);
+  }
   function closeForm() { setShowForm(false); }
 
   function resetForm() {
@@ -309,7 +355,17 @@ export default function Utilizadores() {
       username: cleanUsername, password,
       permissions: defaultPermissionsForRole(role),
     };
-    setUsers(current => [...current, newUser]);
+    if (editingUserEmail) {
+      setUsers(current =>
+        current.map(user =>
+          user.email === editingUserEmail ? newUser : user
+        )
+      );
+    } else {
+      setUsers(current => [...current, newUser]);
+    }
+
+    setEditingUserEmail(null);
     resetForm();
     setShowForm(false);
   }
@@ -398,11 +454,10 @@ export default function Utilizadores() {
             <Link
               key={item.label}
               href={item.href}
-              className={`menu-item ${
-                item.label === "Utilizadores"
-                  ? "active"
-                  : ""
-              }`}
+              className={`menu-item ${item.label === "Utilizadores"
+                ? "active"
+                : ""
+                }`}
             >
               <span>{item.icon}</span>
 
@@ -495,7 +550,9 @@ export default function Utilizadores() {
                 style={{ paddingBottom: 14, marginBottom: 12 }}
               >
                 <div>
-                  <h2 style={{ marginBottom: 4 }}>Adicionar Utilizador</h2>
+                  <h2 style={{ marginBottom: 4 }}>
+                    {editingUserEmail ? "Editar Utilizador" : "Adicionar Utilizador"}
+                  </h2>
                   <p>Preencha os dados do novo utilizador no Smart Campus.</p>
                 </div>
                 <button type="button" className="close-button" onClick={closeForm} aria-label="Fechar">×</button>
@@ -700,7 +757,7 @@ export default function Utilizadores() {
                   </section>
                 )}
 
-                
+
 
 
                 {role === "Administrador" && (
@@ -724,7 +781,9 @@ export default function Utilizadores() {
 
                 <div className="user-form-actions" style={{ paddingTop: 8 }}>
                   <button type="button" className="secondary-button" onClick={closeForm}>Cancelar</button>
-                  <button type="submit" className="primary-button">👤+ &nbsp;Adicionar {role.toLowerCase()}</button>
+                  <button type="submit" className="primary-button">
+                    👤+ &nbsp;{editingUserEmail ? "Guardar alterações" : `Adicionar ${role.toLowerCase()}`}
+                  </button>
                 </div>
               </form>
             </div>
@@ -887,12 +946,11 @@ export default function Utilizadores() {
 
                         <td>
                           <span
-                            className={`status ${
-                              user.status ===
+                            className={`status ${user.status ===
                               "Ativo"
-                                ? "status-active"
-                                : "status-inactive"
-                            }`}
+                              ? "status-active"
+                              : "status-inactive"
+                              }`}
                           >
                             ●{" "}
                             {user.status}
@@ -904,6 +962,7 @@ export default function Utilizadores() {
                             <button
                               type="button"
                               title="Editar utilizador"
+                              onClick={() => editUser(user)}
                             >
                               ✏️
                             </button>
@@ -936,5 +995,5 @@ export default function Utilizadores() {
         </div>
       </section>
     </main>
-    );
+  );
 }
