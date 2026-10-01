@@ -2,15 +2,38 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export default function Login() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    alert("Login recebido! A autenticação será configurada na próxima etapa.");
+    setError("");
+    setLoading(true);
+
+    const supabase = createClient();
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setError("Email ou palavra-passe incorretos.");
+      setLoading(false);
+      return;
+    }
+
+    router.push("/utilizadores");
+    router.refresh();
   }
 
   return (
@@ -101,28 +124,41 @@ export default function Login() {
             style={{
               width: "100%",
               padding: "12px",
-              marginBottom: "25px",
+              marginBottom: "15px",
               borderRadius: "8px",
               border: "1px solid #ccc",
               boxSizing: "border-box",
             }}
           />
 
+          {error && (
+            <p
+              style={{
+                color: "#dc2626",
+                fontSize: "14px",
+                marginBottom: "15px",
+              }}
+            >
+              {error}
+            </p>
+          )}
+
           <button
             type="submit"
+            disabled={loading}
             style={{
               width: "100%",
               padding: "14px",
               borderRadius: "8px",
               border: "none",
-              background: "#22c55e",
+              background: loading ? "#86efac" : "#22c55e",
               color: "white",
               fontSize: "17px",
               fontWeight: "bold",
-              cursor: "pointer",
+              cursor: loading ? "not-allowed" : "pointer",
             }}
           >
-            Entrar
+            {loading ? "A entrar..." : "Entrar"}
           </button>
         </form>
 
