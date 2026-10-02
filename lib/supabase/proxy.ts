@@ -33,19 +33,36 @@ export async function updateSession(request: NextRequest) {
 
   const { data: claimsData, error } = await supabase.auth.getClaims();
 
-  const isProtectedRoute =
-    request.nextUrl.pathname.startsWith("/utilizadores");
+  const pathname = request.nextUrl.pathname;
+  const isAuthenticated = !error && !!claimsData?.claims;
+  const isUsersPage = pathname.startsWith("/utilizadores");
 
-  const isAuthenticated =
-    !error && !!claimsData?.claims;
-
-  if (isProtectedRoute && !isAuthenticated) {
+  if (isUsersPage && !isAuthenticated) {
     const loginUrl = request.nextUrl.clone();
-
     loginUrl.pathname = "/login";
     loginUrl.search = "";
-
     return NextResponse.redirect(loginUrl);
+  }
+
+  if (isUsersPage && isAuthenticated) {
+    const userId = claimsData.claims.sub;
+
+    const { data: profile, error: profileError } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (
+      profileError ||
+      !profile ||
+      !["Administrador", "Administrador Adjunto"].includes(profile.role)
+    ) {
+      const dashboardUrl = request.nextUrl.clone();
+      dashboardUrl.pathname = "/dashboard";
+      dashboardUrl.search = "";
+      return NextResponse.redirect(dashboardUrl);
+    }
   }
 
   return supabaseResponse;
