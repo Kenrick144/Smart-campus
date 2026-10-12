@@ -69,10 +69,7 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (!currentUser) {
-      return NextResponse.json(
-        { error: "Não autenticado." },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
     const { data: currentProfile, error: profileError } = await supabase
@@ -81,18 +78,39 @@ export async function POST(request: Request) {
       .eq("id", currentUser.id)
       .single();
 
+    if (profileError || !currentProfile) {
+      return NextResponse.json(
+        { error: "Não foi possível verificar as permissões do utilizador." },
+        { status: 403 },
+      );
+    }
+
     if (
-      profileError ||
-      !currentProfile ||
-      currentProfile.role !== "Administrador"
+      currentProfile.role !== "Administrador" &&
+      currentProfile.role !== "Administrador Adjunto"
     ) {
       return NextResponse.json(
-        { error: "Apenas um Administrador pode criar utilizadores." },
-        { status: 403 }
+        { error: "Não tens permissão para criar utilizadores." },
+        { status: 403 },
       );
     }
 
     const body = (await request.json()) as CreateUserBody;
+
+    if (
+      currentProfile.role === "Administrador Adjunto" &&
+      body.role !== "Aluno" &&
+      body.role !== "Professor" &&
+      body.role !== "Funcionário"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "O Administrador Adjunto só pode criar Alunos, Professores e Funcionários.",
+        },
+        { status: 403 },
+      );
+    }
 
     const cleanName = body.name?.trim();
     const cleanEmail = body.email?.trim().toLowerCase();
@@ -102,21 +120,21 @@ export async function POST(request: Request) {
     if (!cleanName || !cleanEmail || !cleanPassword || !body.role) {
       return NextResponse.json(
         { error: "Preenche os campos obrigatórios." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!roles.includes(body.role)) {
       return NextResponse.json(
         { error: "Tipo de utilizador inválido." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (cleanPassword.length < 6) {
       return NextResponse.json(
         { error: "A palavra-passe deve ter pelo menos 6 caracteres." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -136,46 +154,41 @@ export async function POST(request: Request) {
     if (authError || !authData.user) {
       return NextResponse.json(
         { error: authError?.message ?? "Não foi possível criar a conta." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const userId = authData.user.id;
 
-    const { error: userError } = await admin
-      .from("users")
-      .insert({
-        id: userId,
-        email: cleanEmail,
-        name: cleanName,
-        role: body.role,
-        status: body.status ?? "Ativo",
+    const { error: userError } = await admin.from("users").insert({
+      id: userId,
+      email: cleanEmail,
+      name: cleanName,
+      role: body.role,
+      status: body.status ?? "Ativo",
 
-        birth_date: body.birthDate || null,
-        phone: body.phone || null,
-        nif: body.nif || null,
-        document_type: body.documentType || null,
-        document_number: body.documentNumber || null,
-        niss: body.niss || null,
-        health_number: body.healthNumber || null,
-        address: body.address || null,
+      birth_date: body.birthDate || null,
+      phone: body.phone || null,
+      nif: body.nif || null,
+      document_type: body.documentType || null,
+      document_number: body.documentNumber || null,
+      niss: body.niss || null,
+      health_number: body.healthNumber || null,
+      address: body.address || null,
 
-        department: body.department || null,
-        employee_position: body.employeePosition || null,
-        hiring_date: body.hiringDate || null,
-        contract_type: body.contractType || null,
-        professional_status: body.professionalStatus ?? "Ativo",
+      department: body.department || null,
+      employee_position: body.employeePosition || null,
+      hiring_date: body.hiringDate || null,
+      contract_type: body.contractType || null,
+      professional_status: body.professionalStatus ?? "Ativo",
 
-        username: cleanUsername || null,
-      });
+      username: cleanUsername || null,
+    });
 
     if (userError) {
       await admin.auth.admin.deleteUser(userId);
 
-      return NextResponse.json(
-        { error: userError.message },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: userError.message }, { status: 400 });
     }
 
     if (body.role === "Aluno") {
@@ -201,10 +214,7 @@ export async function POST(request: Request) {
         await admin.from("users").delete().eq("id", userId);
         await admin.auth.admin.deleteUser(userId);
 
-        return NextResponse.json(
-          { error: error.message },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: error.message }, { status: 400 });
       }
     }
 
@@ -222,10 +232,7 @@ export async function POST(request: Request) {
         await admin.from("users").delete().eq("id", userId);
         await admin.auth.admin.deleteUser(userId);
 
-        return NextResponse.json(
-          { error: error.message },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: error.message }, { status: 400 });
       }
     }
 
@@ -244,10 +251,7 @@ export async function POST(request: Request) {
         await admin.from("users").delete().eq("id", userId);
         await admin.auth.admin.deleteUser(userId);
 
-        return NextResponse.json(
-          { error: error.message },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: error.message }, { status: 400 });
       }
     }
 
@@ -274,7 +278,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       { error: "Ocorreu um erro inesperado." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
