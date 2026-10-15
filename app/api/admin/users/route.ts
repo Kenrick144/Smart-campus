@@ -97,6 +97,21 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as CreateUserBody;
 
+    if (
+      currentProfile.role === "Administrador Adjunto" &&
+      body.role !== "Aluno" &&
+      body.role !== "Professor" &&
+      body.role !== "Funcionário"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "O Administrador Adjunto só pode criar Alunos, Professores e Funcionários.",
+        },
+        { status: 403 },
+      );
+    }
+
     const cleanName = body.name?.trim();
     const cleanEmail = body.email?.trim().toLowerCase();
     const cleanPassword = body.password;

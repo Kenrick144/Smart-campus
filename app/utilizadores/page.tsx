@@ -240,7 +240,13 @@ export default function Utilizadores() {
     "Técnico de Biblioteca", "Técnico de Manutenção", "Assistente Operacional", "Outro"
   ];
 
-  function openForm() { setShowForm(true); }
+  
+function openForm() {
+  setEditingUserEmail(null);
+  resetForm();
+  setShowForm(true);
+}
+
   function editUser(user: User) {
     setEditingUserEmail(user.email);
 
