@@ -1,6 +1,18 @@
 "use client";
 
+import Sidebar from "../components/Sidebar";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+
+type UserProfile = {
+  id: string;
+  name: string;
+  email: string;
+  role: "Aluno" | "Professor" | "Funcionário" | "Administrador Adjunto" | "Administrador";
+  status: string;
+};
 
 const menuItems = [
   { icon: "🏠", label: "Dashboard", href: "/dashboard" },
@@ -56,55 +68,108 @@ const activities = [
   },
 ];
 
+
 export default function Dashboard() {
+  const router = useRouter();
+  const supabase = createClient();
+
+  const [totalAlunos, setTotalAlunos] = useState<number | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadProfile() {
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
+
+      if (authError || !authData.user) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name, email, role, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (error || !data) {
+        console.error("Não foi possível carregar o perfil.");
+        if (active) setLoading(false);
+        return;
+      }
+
+      if (data.status !== "Ativo") {
+        await supabase.auth.signOut();
+        router.replace("/login");
+        return;
+      }
+
+      if (active) {
+        setProfile(data as UserProfile);
+        setLoading(false);
+      }
+    }
+
+    loadProfile();
+
+    async function loadTotalAlunos() {
+      const { count, error } = await supabase
+        .from("alunos")
+        .select("*", { count: "exact", head: true });
+
+      if (error) {
+        console.error("Não foi possível contar os alunos.");
+        return;
+      }
+
+      if (active) {
+        setTotalAlunos(count ?? 0);
+      }
+    }
+
+    loadTotalAlunos();
+
+    return () => {
+      active = false;
+    };
+  }, [router, supabase]);
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
+
+  if (loading) {
+    return <main className="dashboard">A carregar o teu perfil...</main>;
+  }
+
+  if (!profile) {
+    return (
+      <main className="dashboard">
+        <p>Não foi possível carregar o perfil.</p>
+        <button onClick={() => router.replace("/login")}>
+          Voltar ao início de sessão
+        </button>
+      </main>
+    );
+  }
+
   return (
     <main className="dashboard">
-      {/* SIDEBAR */}
-      <aside className="sidebar">
-        <div className="logo">
-          <span>🎓</span>
-          <strong>
-            SMART
-            <br />
-            CAMPUS
-          </strong>
-        </div>
+      <Sidebar
+        name={profile.name}
+        email={profile.email}
+        menuItems={menuItems}
+        onLogout={handleLogout}
+      />
 
-        <div className="profile">
-          <div className="profile-avatar">👨‍💼</div>
-
-          <div>
-            <strong>Administrador</strong>
-            <p>admin@smartcampus.com</p>
-            <span className="online">● Online</span>
-          </div>
-        </div>
-
-        <nav className="menu">
-          {menuItems.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={`menu-item ${
-                item.label === "Dashboard" ? "active" : ""
-              }`}
-            >
-              <span>{item.icon}</span>
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="logout">
-          🚪 <span>Sair</span>
-        </div>
-      </aside>
-
-      {/* CONTEÚDO */}
       <section className="content">
-        {/* HEADER */}
         <header className="header">
-          <h1>Dashboard - Administrador</h1>
+          <h1>Dashboard - {profile.role}</h1>
 
           <div className="header-actions">
             <div className="search">
@@ -112,193 +177,76 @@ export default function Dashboard() {
               <input placeholder="Pesquisar..." />
             </div>
 
-            <div className="notification">
-              🔔
-              <span>3</span>
-            </div>
+            <div className="notification">🔔</div>
 
             <div className="admin">
               👨‍💼
-              <strong>Administrador</strong>
+              <strong>{profile.name}</strong>
               <span>⌄</span>
             </div>
           </div>
         </header>
 
-        {/* ESTATÍSTICAS */}
         <section className="stats">
-          <Stat icon="👥" title="Total de Alunos" value="352" change="↑ 12 este mês" />
+          <Stat
+            icon="👥"
+            title="Total de Alunos"
+            value={totalAlunos === null ? "—" : String(totalAlunos)}
+            change={totalAlunos === null ? "A carregar..." : "Registos na base de dados"}
+          />
           <Stat
             icon="👩‍🏫"
             title="Total de Professores"
-            value="28"
-            change="↑ 2 este mês"
+            value="—"
+            change="Dados por ligar"
           />
-          <Stat icon="📚" title="Turmas" value="18" change="↑ 1 este mês" />
-          <Stat icon="🏫" title="Salas" value="24" change="→ 0 este mês" />
-          <Stat icon="💻" title="PCs" value="40" change="↑ 3 ocupados" />
+          <Stat
+            icon="📚"
+            title="Turmas"
+            value="—"
+            change="Dados por ligar"
+          />
+          <Stat
+            icon="🏫"
+            title="Salas"
+            value="—"
+            change="Dados por ligar"
+          />
+          <Stat
+            icon="💻"
+            title="PCs"
+            value="—"
+            change="Dados por ligar"
+          />
         </section>
 
-        {/* PAINÉIS */}
         <section className="panels">
-          {/* ATIVIDADES */}
           <div className="panel activities-panel">
             <div className="panel-header">
               <h2>Resumo de Atividades</h2>
-
-              <select>
-                <option>Últimos 7 dias</option>
-                <option>Últimos 30 dias</option>
-              </select>
             </div>
-
-            <div className="legend">
-              <span className="legend-blue">● Scans QR</span>
-              <span className="legend-green">● Presenças</span>
-              <span className="legend-orange">● Utilização de PCs</span>
-            </div>
-
-            {/* GRÁFICO SIMPLES E SEGURO */}
-            <div className="simple-chart">
-              <div className="chart-row">
-                <span>100</span>
-                <div className="bar">
-                  <div className="bar-fill blue" style={{ width: "75%" }} />
-                </div>
-              </div>
-
-              <div className="chart-row">
-                <span>80</span>
-                <div className="bar">
-                  <div className="bar-fill blue" style={{ width: "62%" }} />
-                </div>
-              </div>
-
-              <div className="chart-row">
-                <span>60</span>
-                <div className="bar">
-                  <div className="bar-fill blue" style={{ width: "52%" }} />
-                </div>
-              </div>
-
-              <div className="chart-row">
-                <span>40</span>
-                <div className="bar">
-                  <div className="bar-fill green" style={{ width: "40%" }} />
-                </div>
-              </div>
-
-              <div className="chart-row">
-                <span>20</span>
-                <div className="bar">
-                  <div className="bar-fill orange" style={{ width: "25%" }} />
-                </div>
-              </div>
-
-              <div className="chart-row">
-                <span>0</span>
-                <div className="bar">
-                  <div className="bar-fill orange" style={{ width: "12%" }} />
-                </div>
-              </div>
-
-              <div className="chart-dates">
-                <span>15/05</span>
-                <span>16/05</span>
-                <span>17/05</span>
-                <span>18/05</span>
-                <span>19/05</span>
-                <span>20/05</span>
-                <span>21/05</span>
-              </div>
-            </div>
+            <p>Os dados de atividade serão ligados à base de dados.</p>
           </div>
 
-          {/* ESTADO DOS PCS */}
           <div className="panel pc-panel">
             <div className="panel-header">
               <h2>Estado dos PCs</h2>
-              <a href="#">Ver todos</a>
             </div>
-
-            <div className="donut">
-              <div className="donut-center">
-                <strong>40</strong>
-                <span>Total</span>
-              </div>
-            </div>
-
-            <div className="pc-list">
-              <div>
-                <span>
-                  <i className="dot green-dot" /> Livre
-                </span>
-                <strong>35 (87.5%)</strong>
-              </div>
-
-              <div>
-                <span>
-                  <i className="dot red-dot" /> Ocupado
-                </span>
-                <strong>3 (7.5%)</strong>
-              </div>
-
-              <div>
-                <span>
-                  <i className="dot yellow-dot" /> Reservado
-                </span>
-                <strong>1 (2.5%)</strong>
-              </div>
-
-              <div>
-                <span>
-                  <i className="dot gray-dot" /> Manutenção
-                </span>
-                <strong>1 (2.5%)</strong>
-              </div>
-            </div>
+            <p>O estado dos computadores será carregado da base de dados.</p>
           </div>
 
-          {/* ATIVIDADES RECENTES */}
           <div className="panel recent-panel">
             <div className="panel-header">
               <h2>Atividades Recentes</h2>
-              <a href="#">Ver todas</a>
             </div>
-
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Ação</th>
-                    <th>Utilizador</th>
-                    <th>Detalhes</th>
-                    <th>Data/Hora</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {activities.map((activity) => (
-                    <tr key={`${activity.action}-${activity.time}`}>
-                      <td>{activity.action}</td>
-                      <td>{activity.user}</td>
-                      <td>{activity.details}</td>
-                      <td>
-                        {activity.date}
-                        <br />
-                        {activity.time}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <p>As atividades recentes serão carregadas da base de dados.</p>
           </div>
         </section>
       </section>
     </main>
   );
 }
+
 
 function Stat({
   icon,
