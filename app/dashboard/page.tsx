@@ -1,10 +1,61 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import Sidebar from "@/app/componets/Sibebar";
+import { createClient } from "@/lib/supabase/client";
 
-const menuItems = [
+type UserRole =
+  | "Aluno"
+  | "Professor"
+  | "Funcionário"
+  | "Administrador Adjunto"
+  | "Administrador";
+
+type UserProfile = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  status: string;
+};
+
+type MenuItem = {
+  icon: string;
+  label: string;
+  href: string;
+};
+
+type DashboardStats = {
+  totalAlunos: number | null;
+  totalProfessores: number | null;
+  totalFuncionarios: number | null;
+  totalTurmas: number | null;
+  totalSalas: number | null;
+  totalPCs: number | null;
+};
+
+type CountTable =
+  | "alunos"
+  | "professores"
+  | "funcionarios"
+  | "turmas"
+  | "salas"
+  | "pcs";
+
+const initialStats: DashboardStats = {
+  totalAlunos: null,
+  totalProfessores: null,
+  totalFuncionarios: null,
+  totalTurmas: null,
+  totalSalas: null,
+  totalPCs: null,
+};
+
+const adminMenu: MenuItem[] = [
   { icon: "🏠", label: "Dashboard", href: "/dashboard" },
-  { icon: "👥", label: "Utilizadores", href: "#" },
+  { icon: "👥", label: "Utilizadores", href: "/utilizadores" },
   { icon: "📚", label: "Turmas", href: "/turmas" },
   { icon: "🎓", label: "Alunos", href: "/alunos" },
   { icon: "👩‍🏫", label: "Professores", href: "/professor" },
@@ -18,286 +69,451 @@ const menuItems = [
   { icon: "📄", label: "Logs", href: "#" },
 ];
 
-const activities = [
-  {
-    action: "Login",
-    user: "Maria Santos",
-    details: "Professor",
-    date: "21/05/2025",
-    time: "10:30",
-  },
-  {
-    action: "Scan QR",
-    user: "João Silva",
-    details: "PC-01 - Sala 101",
-    date: "21/05/2025",
-    time: "10:28",
-  },
-  {
-    action: "Presença",
-    user: "Ana Pereira",
-    details: "Turma T1",
-    date: "21/05/2025",
-    time: "10:25",
-  },
-  {
-    action: "Utilização PC",
-    user: "Pedro Costa",
-    details: "PC-02 - Sala 102",
-    date: "21/05/2025",
-    time: "10:20",
-  },
-  {
-    action: "Logout",
-    user: "Lucas Martins",
-    details: "Professor",
-    date: "21/05/2025",
-    time: "10:15",
-  },
-];
+function getMenuItems(role: UserRole): MenuItem[] {
+  const dashboard: MenuItem = {
+    icon: "🏠",
+    label: "Dashboard",
+    href: "/dashboard",
+  };
+
+  switch (role) {
+    case "Administrador":
+    case "Administrador Adjunto":
+      return adminMenu;
+
+    case "Professor":
+      return [
+        dashboard,
+        { icon: "📚", label: "Turmas", href: "/turmas" },
+        { icon: "🎓", label: "Alunos", href: "/alunos" },
+        { icon: "🗓️", label: "Horários", href: "#" },
+        { icon: "✅", label: "Presenças", href: "/presencas" },
+        { icon: "▣", label: "QR Codes", href: "/qr-code" },
+        { icon: "💻", label: "PCs", href: "/computadores" },
+      ];
+
+    case "Funcionário":
+      return [
+        dashboard,
+        { icon: "🏫", label: "Salas", href: "/salas" },
+        { icon: "💻", label: "PCs", href: "/computadores" },
+        { icon: "✅", label: "Presenças", href: "/presencas" },
+        { icon: "▣", label: "QR Codes", href: "/qr-code" },
+      ];
+
+    case "Aluno":
+      return [
+        dashboard,
+        { icon: "📚", label: "Turmas", href: "/turmas" },
+        { icon: "🗓️", label: "Horários", href: "#" },
+        { icon: "✅", label: "Presenças", href: "/presencas" },
+      ];
+  }
+}
+
+function isAdmin(role: UserRole) {
+  return (
+    role === "Administrador" ||
+    role === "Administrador Adjunto"
+  );
+}
 
 export default function Dashboard() {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
+  const [stats, setStats] = useState<DashboardStats>(initialStats);
+
+  useEffect(() => {
+    let active = true;
+
+    async function countTable(
+      table: CountTable
+    ): Promise<number | null> {
+      const { count, error } = await supabase
+        .from(table)
+        .select("*", { count: "exact", head: true });
+
+      if (error) {
+        console.error(
+          `Erro ao contar registos em ${table}:`,
+          error.message
+        );
+        return null;
+      }
+
+      return count ?? 0;
+    }
+
+    async function loadDashboard() {
+      try {
+        const { data: authData, error: authError } =
+          await supabase.auth.getUser();
+
+        if (authError || !authData.user) {
+          router.replace("/login");
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("users")
+          .select("id, name, email, role, status")
+          .eq("id", authData.user.id)
+          .maybeSingle();
+
+        if (error || !data) {
+          console.error(
+            "Não foi possível carregar o perfil:",
+            error?.message
+          );
+
+          if (active) {
+            setPageError(
+              "Não foi possível carregar o teu perfil. Verifica a ligação e as permissões da tua conta."
+            );
+            setLoading(false);
+          }
+
+          return;
+        }
+
+        const roles: UserRole[] = [
+          "Aluno",
+          "Professor",
+          "Funcionário",
+          "Administrador Adjunto",
+          "Administrador",
+        ];
+
+        if (!roles.includes(data.role as UserRole)) {
+          if (active) {
+            setPageError(
+              "A tua conta não tem um cargo válido configurado."
+            );
+            setLoading(false);
+          }
+          return;
+        }
+
+        const currentProfile = data as UserProfile;
+
+        if (currentProfile.status !== "Ativo") {
+          await supabase.auth.signOut();
+          router.replace("/login");
+          return;
+        }
+
+        if (active) {
+          setProfile(currentProfile);
+          setLoading(false);
+        }
+
+        if (isAdmin(currentProfile.role)) {
+          const [
+            totalAlunos,
+            totalProfessores,
+            totalFuncionarios,
+            totalTurmas,
+            totalSalas,
+            totalPCs,
+          ] = await Promise.all([
+            countTable("alunos"),
+            countTable("professores"),
+            countTable("funcionarios"),
+            countTable("turmas"),
+            countTable("salas"),
+            countTable("pcs"),
+          ]);
+
+          if (active) {
+            setStats({
+              totalAlunos,
+              totalProfessores,
+              totalFuncionarios,
+              totalTurmas,
+              totalSalas,
+              totalPCs,
+            });
+          }
+        } else if (currentProfile.role === "Funcionário") {
+          const [totalSalas, totalPCs] = await Promise.all([
+            countTable("salas"),
+            countTable("pcs"),
+          ]);
+
+          if (active) {
+            setStats((previous) => ({
+              ...previous,
+              totalSalas,
+              totalPCs,
+            }));
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao carregar o Dashboard:", error);
+
+        if (active) {
+          setPageError(
+            "Ocorreu um erro ao carregar o Dashboard. Tenta atualizar a página."
+          );
+          setLoading(false);
+        }
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      active = false;
+    };
+  }, [router, supabase]);
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
+
+  if (loading) {
+    return (
+      <main className="dashboard">
+        <section className="content">
+          <p>A carregar o Dashboard...</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (pageError || !profile) {
+    return (
+      <main className="dashboard">
+        <section className="content">
+          <h1>Não foi possível abrir o Dashboard</h1>
+          <p>{pageError || "Não foi possível carregar o perfil."}</p>
+          <button type="button" onClick={() => router.replace("/login")}>
+            Voltar ao início de sessão
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  const menuItems = getMenuItems(profile.role);
+
   return (
     <main className="dashboard">
-      {/* SIDEBAR */}
-      <aside className="sidebar">
-        <div className="logo">
-          <span>🎓</span>
-          <strong>
-            SMART
-            <br />
-            CAMPUS
-          </strong>
-        </div>
+      <Sidebar
+        name={profile.name}
+        email={profile.email}
+        menuItems={menuItems}
+        onLogout={handleLogout}
+      />
 
-        <div className="profile">
-          <div className="profile-avatar">👨‍💼</div>
-
-          <div>
-            <strong>Administrador</strong>
-            <p>admin@smartcampus.com</p>
-            <span className="online">● Online</span>
-          </div>
-        </div>
-
-        <nav className="menu">
-          {menuItems.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={`menu-item ${
-                item.label === "Dashboard" ? "active" : ""
-              }`}
-            >
-              <span>{item.icon}</span>
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="logout">
-          🚪 <span>Sair</span>
-        </div>
-      </aside>
-
-      {/* CONTEÚDO */}
       <section className="content">
-        {/* HEADER */}
         <header className="header">
-          <h1>Dashboard - Administrador</h1>
+          <h1>Dashboard - {profile.role}</h1>
 
           <div className="header-actions">
-            <div className="search">
-              🔍
-              <input placeholder="Pesquisar..." />
-            </div>
-
-            <div className="notification">
-              🔔
-              <span>3</span>
-            </div>
-
             <div className="admin">
-              👨‍💼
-              <strong>Administrador</strong>
-              <span>⌄</span>
+              <span>👤</span>
+              <strong>{profile.name}</strong>
+              <span>{profile.role}</span>
             </div>
           </div>
         </header>
 
-        {/* ESTATÍSTICAS */}
-        <section className="stats">
-          <Stat icon="👥" title="Total de Alunos" value="352" change="↑ 12 este mês" />
-          <Stat
-            icon="👩‍🏫"
-            title="Total de Professores"
-            value="28"
-            change="↑ 2 este mês"
+        {isAdmin(profile.role) && (
+          <AdminDashboard stats={stats} />
+        )}
+
+        {profile.role === "Professor" && (
+          <RoleDashboard
+            title={`Bem-vindo, ${profile.name}`}
+            description="Aqui encontrarás os acessos às ferramentas pedagógicas disponíveis para a tua conta."
+            links={menuItems}
           />
-          <Stat icon="📚" title="Turmas" value="18" change="↑ 1 este mês" />
-          <Stat icon="🏫" title="Salas" value="24" change="→ 0 este mês" />
-          <Stat icon="💻" title="PCs" value="40" change="↑ 3 ocupados" />
-        </section>
+        )}
 
-        {/* PAINÉIS */}
-        <section className="panels">
-          {/* ATIVIDADES */}
-          <div className="panel activities-panel">
-            <div className="panel-header">
-              <h2>Resumo de Atividades</h2>
+        {profile.role === "Funcionário" && (
+          <StaffDashboard stats={stats} links={menuItems} />
+        )}
 
-              <select>
-                <option>Últimos 7 dias</option>
-                <option>Últimos 30 dias</option>
-              </select>
-            </div>
-
-            <div className="legend">
-              <span className="legend-blue">● Scans QR</span>
-              <span className="legend-green">● Presenças</span>
-              <span className="legend-orange">● Utilização de PCs</span>
-            </div>
-
-            {/* GRÁFICO SIMPLES E SEGURO */}
-            <div className="simple-chart">
-              <div className="chart-row">
-                <span>100</span>
-                <div className="bar">
-                  <div className="bar-fill blue" style={{ width: "75%" }} />
-                </div>
-              </div>
-
-              <div className="chart-row">
-                <span>80</span>
-                <div className="bar">
-                  <div className="bar-fill blue" style={{ width: "62%" }} />
-                </div>
-              </div>
-
-              <div className="chart-row">
-                <span>60</span>
-                <div className="bar">
-                  <div className="bar-fill blue" style={{ width: "52%" }} />
-                </div>
-              </div>
-
-              <div className="chart-row">
-                <span>40</span>
-                <div className="bar">
-                  <div className="bar-fill green" style={{ width: "40%" }} />
-                </div>
-              </div>
-
-              <div className="chart-row">
-                <span>20</span>
-                <div className="bar">
-                  <div className="bar-fill orange" style={{ width: "25%" }} />
-                </div>
-              </div>
-
-              <div className="chart-row">
-                <span>0</span>
-                <div className="bar">
-                  <div className="bar-fill orange" style={{ width: "12%" }} />
-                </div>
-              </div>
-
-              <div className="chart-dates">
-                <span>15/05</span>
-                <span>16/05</span>
-                <span>17/05</span>
-                <span>18/05</span>
-                <span>19/05</span>
-                <span>20/05</span>
-                <span>21/05</span>
-              </div>
-            </div>
-          </div>
-
-          {/* ESTADO DOS PCS */}
-          <div className="panel pc-panel">
-            <div className="panel-header">
-              <h2>Estado dos PCs</h2>
-              <a href="#">Ver todos</a>
-            </div>
-
-            <div className="donut">
-              <div className="donut-center">
-                <strong>40</strong>
-                <span>Total</span>
-              </div>
-            </div>
-
-            <div className="pc-list">
-              <div>
-                <span>
-                  <i className="dot green-dot" /> Livre
-                </span>
-                <strong>35 (87.5%)</strong>
-              </div>
-
-              <div>
-                <span>
-                  <i className="dot red-dot" /> Ocupado
-                </span>
-                <strong>3 (7.5%)</strong>
-              </div>
-
-              <div>
-                <span>
-                  <i className="dot yellow-dot" /> Reservado
-                </span>
-                <strong>1 (2.5%)</strong>
-              </div>
-
-              <div>
-                <span>
-                  <i className="dot gray-dot" /> Manutenção
-                </span>
-                <strong>1 (2.5%)</strong>
-              </div>
-            </div>
-          </div>
-
-          {/* ATIVIDADES RECENTES */}
-          <div className="panel recent-panel">
-            <div className="panel-header">
-              <h2>Atividades Recentes</h2>
-              <a href="#">Ver todas</a>
-            </div>
-
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Ação</th>
-                    <th>Utilizador</th>
-                    <th>Detalhes</th>
-                    <th>Data/Hora</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {activities.map((activity) => (
-                    <tr key={`${activity.action}-${activity.time}`}>
-                      <td>{activity.action}</td>
-                      <td>{activity.user}</td>
-                      <td>{activity.details}</td>
-                      <td>
-                        {activity.date}
-                        <br />
-                        {activity.time}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
+        {profile.role === "Aluno" && (
+          <RoleDashboard
+            title={`Bem-vindo, ${profile.name}`}
+            description="Aqui encontrarás os acessos às tuas áreas académicas. Os teus horários, turmas e presenças devem ser apresentados a partir dos registos associados à tua conta."
+            links={menuItems}
+          />
+        )}
       </section>
     </main>
   );
+}
+
+function AdminDashboard({ stats }: { stats: DashboardStats }) {
+  return (
+    <>
+      <section className="stats">
+        <Stat
+          icon="🎓"
+          title="Total de Alunos"
+          value={formatCount(stats.totalAlunos)}
+          change="Registos na base de dados"
+        />
+        <Stat
+          icon="👩‍🏫"
+          title="Total de Professores"
+          value={formatCount(stats.totalProfessores)}
+          change="Registos na base de dados"
+        />
+        <Stat
+          icon="👥"
+          title="Funcionários"
+          value={formatCount(stats.totalFuncionarios)}
+          change="Registos na base de dados"
+        />
+        <Stat
+          icon="📚"
+          title="Turmas"
+          value={formatCount(stats.totalTurmas)}
+          change="Registos na base de dados"
+        />
+        <Stat
+          icon="🏫"
+          title="Salas"
+          value={formatCount(stats.totalSalas)}
+          change="Registos na base de dados"
+        />
+        <Stat
+          icon="💻"
+          title="PCs"
+          value={formatCount(stats.totalPCs)}
+          change="Registos na base de dados"
+        />
+      </section>
+
+      <section className="panels">
+        <div className="panel activities-panel">
+          <div className="panel-header">
+            <h2>Resumo de Atividades</h2>
+          </div>
+          <p>
+            Os dados de exemplo foram removidos para evitar mostrar
+            atividades fictícias. Este painel será ligado à tabela
+            logs quando confirmarmos os seus campos.
+          </p>
+        </div>
+
+        <div className="panel pc-panel">
+          <div className="panel-header">
+            <h2>Estado dos PCs</h2>
+          </div>
+          <div className="donut-center">
+            <strong>{formatCount(stats.totalPCs)}</strong>
+            <span>Total de PCs</span>
+          </div>
+          <p>
+            A distribuição entre livres, ocupados, reservados e em
+            manutenção depende do campo de estado existente na tabela
+            pcs, que ainda precisamos de confirmar.
+          </p>
+        </div>
+
+        <div className="panel recent-panel">
+          <div className="panel-header">
+            <h2>Atividades Recentes</h2>
+          </div>
+          <p>
+            As atividades serão apresentadas aqui depois de ligarmos
+            este painel aos registos reais da tabela logs.
+          </p>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function StaffDashboard({
+  stats,
+  links,
+}: {
+  stats: DashboardStats;
+  links: MenuItem[];
+}) {
+  return (
+    <>
+      <section className="stats">
+        <Stat
+          icon="🏫"
+          title="Salas"
+          value={formatCount(stats.totalSalas)}
+          change="Registos na base de dados"
+        />
+        <Stat
+          icon="💻"
+          title="PCs"
+          value={formatCount(stats.totalPCs)}
+          change="Registos na base de dados"
+        />
+      </section>
+
+      <RoleDashboard
+        title="Área de Funcionário"
+        description="Acede às áreas operacionais disponíveis para o teu cargo."
+        links={links}
+      />
+    </>
+  );
+}
+
+function RoleDashboard({
+  title,
+  description,
+  links,
+}: {
+  title: string;
+  description: string;
+  links: MenuItem[];
+}) {
+  return (
+    <section className="panels">
+      <div className="panel">
+        <div className="panel-header">
+          <h2>{title}</h2>
+        </div>
+        <p>{description}</p>
+
+        <nav className="menu">
+          {links
+            .filter((item) => item.href !== "/dashboard")
+            .map((item) =>
+              item.href === "#" ? (
+                <span className="menu-item" key={item.label}>
+                  <span>{item.icon}</span>
+                  {item.label} — ainda não disponível
+                </span>
+              ) : (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className="menu-item"
+                >
+                  <span>{item.icon}</span>
+                  {item.label}
+                </Link>
+              )
+            )}
+        </nav>
+      </div>
+    </section>
+  );
+}
+
+function formatCount(value: number | null) {
+  return value === null ? "—" : String(value);
 }
 
 function Stat({
