@@ -1,6 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import { useMemo } from "react";
+import { useRouter } from "next/navigation";
+import Sidebar from "@/app/componets/Sibebar";
+import { createClient } from "@/lib/supabase/client";
 
 const menuItems = [
   { icon: "🏠", label: "Dashboard", href: "/dashboard" },
@@ -57,18 +60,26 @@ const activities = [
 ];
 
 export default function Dashboard() {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.replace("/login");
+  }
+
   return (
     <main className="dashboard">
       <Sidebar
-        name={profile.name}
-        email={profile.email}
+        name="Administrador"
+        email=""
         menuItems={menuItems}
         onLogout={handleLogout}
       />
 
       <section className="content">
         <header className="header">
-          <h1>Dashboard - {profile.role}</h1>
+          <h1>Dashboard - Administrador</h1>
 
           <div className="header-actions">
             <div className="search">
@@ -261,60 +272,8 @@ export default function Dashboard() {
         </section>
       </section>
 
-      <RoleDashboard
-        title="Área de Funcionário"
-        description="Acede às áreas operacionais disponíveis para o teu cargo."
-        links={links}
-      />
-    </>
+    </main>
   );
-}
-
-function RoleDashboard({
-  title,
-  description,
-  links,
-}: {
-  title: string;
-  description: string;
-  links: MenuItem[];
-}) {
-  return (
-    <section className="panels">
-      <div className="panel">
-        <div className="panel-header">
-          <h2>{title}</h2>
-        </div>
-        <p>{description}</p>
-
-        <nav className="menu">
-          {links
-            .filter((item) => item.href !== "/dashboard")
-            .map((item) =>
-              item.href === "#" ? (
-                <span className="menu-item" key={item.label}>
-                  <span>{item.icon}</span>
-                  {item.label} — ainda não disponível
-                </span>
-              ) : (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className="menu-item"
-                >
-                  <span>{item.icon}</span>
-                  {item.label}
-                </Link>
-              )
-            )}
-        </nav>
-      </div>
-    </section>
-  );
-}
-
-function formatCount(value: number | null) {
-  return value === null ? "—" : String(value);
 }
 
 
